@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">PFF-GPSPath</string>
+	<string name="drag_marker">Drag Marker</string>
+	<string name="clear_map">Clear</string>
+	<string name="reset_map">Reset</string>
+	<string name="go_map">Go</string>
+	<string name="map_not_ready">Map is not ready yet</string>
+				
+</resources>
