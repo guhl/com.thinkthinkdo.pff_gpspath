@@ -37,6 +37,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service android:name=".PffGPSPathService" >
+        </service>
+
         <meta-data
         	android:name="com.google.android.maps.v2.API_KEY"
         	android:value="AIzaSyDbJyAm5snbON7D103iznO5b4GbCPZ1w9Y" />
