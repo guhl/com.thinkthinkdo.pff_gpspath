@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Observable;
+import java.util.Observer;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -56,7 +58,7 @@ import android.widget.Toast;
 
 public class PffGPSPathActivity extends FragmentActivity 
 	implements OnMapLongClickListener, OnMarkerClickListener, OnInfoWindowClickListener, OnMarkerDragListener, 
-	           OnSeekBarChangeListener, ServiceConnection
+	           OnSeekBarChangeListener, ServiceConnection, Observer
 	{
 
     private static final String LOGTAG = "PffGPSPathActivity";
@@ -70,6 +72,7 @@ public class PffGPSPathActivity extends FragmentActivity
     private TextView mTopText;
     private PackageManager mPm;
     private LatLng mPos;
+    private LatLng mLastPosSet = new LatLng(0.0,0.0);
     private Polyline mMutablePolyline;
     
     private Messenger mServiceMessenger = null;
@@ -81,6 +84,8 @@ public class PffGPSPathActivity extends FragmentActivity
     private static final int SPEED_MAX = 50;
     private static final int SPEED_DEF = 1;
     private int mSpeed;
+    
+    private OpenElevationService mOpenElevationService = new OpenElevationService();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,6 +105,7 @@ public class PffGPSPathActivity extends FragmentActivity
         automaticBind();
         
         setUpMapIfNeeded();
+        mOpenElevationService.addObserver(this);
     }
     
     @Override
@@ -139,6 +145,12 @@ public class PffGPSPathActivity extends FragmentActivity
             }
     }
 
+    @Override
+    public void update(Observable observable, Object data) {
+    	if (observable.getClass().equals(mOpenElevationService.getClass()))
+    		updateElevation((Double)data);
+    }
+    
     private void setUpMapIfNeeded() {
         // Do a null check to confirm that we have not already instantiated the map.
         if (mMap == null) {
@@ -418,19 +430,59 @@ public class PffGPSPathActivity extends FragmentActivity
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
+        mLastPosSet = pos;
         return pos;
 	}
 
+	private void updateElevation(double alt) {
+		// if the mLastPosSet is not 0 then update the location
+		if ( mLastPosSet.latitude != 0 && mLastPosSet.longitude != 0 ) {
+		    try {
+		        Class locationBeanClass = Class.forName("android.content.pff.LocationBean");
+		        Object locBean = locationBeanClass.newInstance();
+		        Method locSetLat = locationBeanClass.getMethod("setLatitude", Double.class);
+		        Method locSetLng = locationBeanClass.getMethod("setLongitude", Double.class);
+		        Method locSetAlt = locationBeanClass.getMethod("setAltitude", Double.class);
+	        	locSetLat.invoke(locBean, mLastPosSet.latitude);
+	        	locSetLng.invoke(locBean, mLastPosSet.longitude);
+	    		locSetAlt.invoke(locBean, alt);
+	        	Method pffSetLocationMethod = mPm.getClass().getMethod("pffSetLocation", locationBeanClass);
+	        	pffSetLocationMethod.invoke(mPm, locBean);
+				Log.i(LOGTAG, "setPffLocation: lat="+mLastPosSet.latitude+", lng="+mLastPosSet.longitude+", alt="+alt);	
+		    } catch (NoSuchMethodException e) {
+		        e.printStackTrace();
+		    } catch (IllegalAccessException e) {
+		        e.printStackTrace();
+		    } catch (InvocationTargetException e) {
+		        e.printStackTrace();
+		    } catch (InstantiationException e) {
+				e.printStackTrace();
+			} catch (ClassNotFoundException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
 	void setPffLocation(LatLng pos) {
+	    mLastPosSet = pos;
+		// start the Elevation Thread
+    	mOpenElevationService.getElevation(pos);
 	    try {
 	        Class locationBeanClass = Class.forName("android.content.pff.LocationBean");
 	        Object locBean = locationBeanClass.newInstance();
 	        Method locSetLat = locationBeanClass.getMethod("setLatitude", Double.class);
 	        Method locSetLng = locationBeanClass.getMethod("setLongitude", Double.class);
-	            locSetLat.invoke(locBean, pos.latitude);
-	            locSetLng.invoke(locBean, pos.longitude);
-	        	Method pffSetLocationMethod = mPm.getClass().getMethod("pffSetLocation", locationBeanClass);
-	        	pffSetLocationMethod.invoke(mPm, locBean);
+	        Method locSetAlt = locationBeanClass.getMethod("setAltitude", Double.class);
+        	
+        	locSetLat.invoke(locBean, pos.latitude);
+        	locSetLng.invoke(locBean, pos.longitude);
+        	// if we have a last elevation -> use it
+	    	if (mOpenElevationService.elevation!=Double.NaN)
+	    		locSetAlt.invoke(locBean, mOpenElevationService.elevation);
+        	// update the location
+        	Method pffSetLocationMethod = mPm.getClass().getMethod("pffSetLocation", locationBeanClass);
+        	pffSetLocationMethod.invoke(mPm, locBean);
+			Log.i(LOGTAG, "setPffLocation: lat="+pos.latitude+", lng="+pos.longitude+", alt="+mOpenElevationService.elevation);	
 	    } catch (NoSuchMethodException e) {
 	        e.printStackTrace();
 	    } catch (IllegalAccessException e) {

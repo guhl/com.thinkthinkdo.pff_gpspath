@@ -139,6 +139,7 @@ public class PffGPSPathService  extends Service {
 			        Object locBean = locationBeanClass.newInstance();
 			        Method locSetLat = locationBeanClass.getMethod("setLatitude", Double.class);
 			        Method locSetLng = locationBeanClass.getMethod("setLongitude", Double.class);
+			        Method locSetAlt = locationBeanClass.getMethod("setAltitude", Double.class);
 			            locSetLat.invoke(locBean, curLat);
 			            locSetLng.invoke(locBean, curLng);
 			        	Method pffSetLocationMethod = mPm.getClass().getMethod("pffSetLocation", locationBeanClass);
