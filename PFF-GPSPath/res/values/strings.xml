@@ -5,9 +5,19 @@
 	<string name="drag_marker">Drag Marker</string>
 	<string name="clear_map">Clear</string>
 	<string name="reset_map">Refresh</string>
+	<string name="route">Route</string>
 	<string name="start_map">Start</string>
 	<string name="stop_map">Stop</string>
 	<string name="map_not_ready">Map is not ready yet</string>
 	<string name="speed">Speed</string>
+	
+	<string name="about_title">About this App</string>
+				
+	<string name="set_pos">"PFF-Location set to "</string>
+	<string name="route_wait">"Waiting for routing information !"</string>
+	<string name="route_start">"Starting PFF Path at"</string>
+	<string name="route_stop">"Stoping PFF Path"</string>
+	<string name="route_not_empty">"Received routing information. Updating path"</string>
+	<string name="route_empty">"Did not receive routing information"</string>
 				
 </resources>

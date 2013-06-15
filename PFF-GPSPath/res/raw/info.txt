@@ -1,0 +1,6 @@
+<h3>PFF-GPSPath</h3>
+
+Version 1.2<br>
+Copyright 2013 - Guhl<br>
+
+<p>Route and Elevation Courtesy of <a href="http://www.mapquest.com/" target="_blank">MapQuest</a></p>

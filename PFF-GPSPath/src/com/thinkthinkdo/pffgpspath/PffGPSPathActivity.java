@@ -6,11 +6,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.SortedMap;
 import java.util.TreeMap;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -47,6 +52,7 @@ import android.graphics.Point;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.animation.BounceInterpolator;
@@ -56,12 +62,19 @@ import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.mapquest.android.maps.RouteManager;
+import com.mapquest.android.maps.RouteResponse;
+import com.mapquest.android.maps.ServiceResponse.Info;
+
+
 public class PffGPSPathActivity extends FragmentActivity 
 	implements OnMapLongClickListener, OnMarkerClickListener, OnInfoWindowClickListener, OnMarkerDragListener, 
 	           OnSeekBarChangeListener, ServiceConnection, Observer
 	{
 
-    private static final String LOGTAG = "PffGPSPathActivity";
+	final public int ABOUT = 0;
+	
+	private static final String LOGTAG = "PffGPSPathActivity";
     private static final LatLng EVEREST = new LatLng(27.988056, 86.925278);
 
     private GoogleMap mMap;
@@ -73,7 +86,8 @@ public class PffGPSPathActivity extends FragmentActivity
     private PackageManager mPm;
     private LatLng mPos;
     private LatLng mLastPosSet = new LatLng(0.0,0.0);
-    private Polyline mMutablePolyline;
+    private ArrayList<LatLng> mRoute = new ArrayList<LatLng>();
+    private Polyline mRoutePolyline;
     
     private Messenger mServiceMessenger = null;
     boolean mIsBound;
@@ -86,6 +100,7 @@ public class PffGPSPathActivity extends FragmentActivity
     private int mSpeed;
     
     private OpenElevationService mOpenElevationService = new OpenElevationService();
+    private RouteManager mRouteManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,8 +121,105 @@ public class PffGPSPathActivity extends FragmentActivity
         
         setUpMapIfNeeded();
         mOpenElevationService.addObserver(this);
+        
+    	mRouteManager=new RouteManager(this, "Fmjtd%7Cluub2dur2g%2Cb5%3Do5-9u2xu6");
+    	mRouteManager.setDebug(true);
+    	mRouteManager.setRouteCallback(new RouteManager.RouteCallback() {
+			@Override
+			public void onError(RouteResponse routeResponse) {
+				Info info=routeResponse.info;
+				int statusCode=info.statusCode;
+				
+				StringBuilder message =new StringBuilder();
+				message.append("Unable to create route.\n")
+					.append("Error: ").append(statusCode).append("\n")
+					.append("Message: ").append(info.messages);
+				Toast.makeText(getApplicationContext(), message.toString(), Toast.LENGTH_LONG).show();
+			}
+
+			@Override
+			public void onSuccess(RouteResponse routeResponse) {
+				String shapePoints = "";
+				List<LatLng> positions = new ArrayList<LatLng>();
+				if (routeResponse.serviceResponse != null) {
+					List<String> list = new ArrayList<String>();
+					try {
+						JSONObject route = routeResponse.serviceResponse.getJSONObject("route");
+						if (route!=null) {
+							JSONObject shape = route.getJSONObject("shape");
+							if (shape!=null) {
+								shapePoints = shape.getString("shapePoints");
+								positions = decompressShapePoints(shapePoints);
+							}
+						}
+					} catch (JSONException e){
+						e.printStackTrace();
+					}
+				}
+				if (!positions.isEmpty()){
+					Toast.makeText(getApplicationContext(), R.string.route_not_empty, Toast.LENGTH_LONG).show();
+			        mRoute = new ArrayList<LatLng>();
+					for(LatLng pos : positions) {
+						mRoute.add(pos);
+					}
+			        // Clear the map because we don't want duplicates of the markers.
+			        mMap.clear();
+			        mRoutePolyline = null;
+			        addMarkersToMap();					
+				} else {
+					Toast.makeText(getApplicationContext(), R.string.route_empty, Toast.LENGTH_LONG).show();
+				}
+			}
+		});
+        
     }
     
+    private List<LatLng> decompressShapePoints(String encoded) {
+    	List<LatLng> positions = new ArrayList<LatLng>();
+    	   double precision = Math.pow(10, -6);
+    	   int len = encoded.length(), index=0;
+    	   double lat=0.0, lng = 0.0;
+    	   while (index < len) {
+    	      int b, shift = 0, result = 0;
+    	      do {
+    	         b = encoded.charAt(index++) - 63;
+    	         result |= (b & 0x1f) << shift;
+    	         shift += 5;
+    	      } while (b >= 0x20);
+    	      int dlat = ((result & 1)!=0 ? ~(result >> 1) : (result >> 1));
+    	      lat += dlat;
+    	      shift = 0;
+    	      result = 0;
+    	      do {
+    	         b = encoded.charAt(index++) - 63;
+    	         result |= (b & 0x1f) << shift;
+    	         shift += 5;
+    	      } while (b >= 0x20);
+    	      int dlng = ((result & 1)!=0 ? ~(result >> 1) : (result >> 1));
+    	      lng += dlng;
+    	      LatLng pos = new LatLng(lat * precision, lng * precision);
+    	      positions.add(pos);
+    	   }
+    	   return positions;
+    	}    
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+    	menu.add(0,ABOUT,0,"About");
+    	return true;
+    }   
+    
+    public boolean onOptionsItemSelected (MenuItem item){
+    	switch (item.getItemId()) {
+    		case ABOUT:
+	    	AboutDialog about = new AboutDialog(this);
+	    	about.setTitle(R.string.about_title);
+	    	about.show();
+	    	break;
+    	}
+    	return true;
+    }    
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -202,12 +314,12 @@ public class PffGPSPathActivity extends FragmentActivity
 
     private void addMarkersToMap() {
         // Uses a colored icon.
+        mPffMarker = mMap.addMarker(new MarkerOptions()
+	    		.position(mPos)
+	    		.title("PFF")
+	    		.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+	    		.draggable(false));
     	if (mMarkers==null || mMarkers.isEmpty()) {
-	        mPffMarker = mMap.addMarker(new MarkerOptions()
-		    		.position(mPos)
-		    		.title("PFF")
-		    		.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
-		    		.draggable(false));
 	        mMarker = mMap.addMarker(new MarkerOptions()
 	                .position(mPos)
 	                .title("S")
@@ -236,11 +348,17 @@ public class PffGPSPathActivity extends FragmentActivity
     		}
     		mMarkers = tmpMarkers;
             PolylineOptions options = new PolylineOptions();
-    		for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
-                options.add(entry.getValue().getPosition());		
+    		if (mRoute.isEmpty()){
+	    		for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
+	                options.add(entry.getValue().getPosition());		
+	    		}
+    		} else {
+	    		for(LatLng pos : mRoute) {
+	                options.add(pos);		
+	    		}    			
     		}
             Polyline mutablePolyline = mMap.addPolyline(options);
-            mMutablePolyline = mutablePolyline;
+            mRoutePolyline = mutablePolyline;
     	}
     }    
 
@@ -267,7 +385,7 @@ public class PffGPSPathActivity extends FragmentActivity
             options.add(entry.getValue().getPosition());		
 		}
         Polyline mutablePolyline = mMap.addPolyline(options);
-        mMutablePolyline = mutablePolyline;
+        mRoutePolyline = mutablePolyline;
     }
     
     /** Called when the Clear button is clicked. */
@@ -276,7 +394,7 @@ public class PffGPSPathActivity extends FragmentActivity
             return;
         }
         mMap.clear();
-        mMutablePolyline = null;
+        mRoutePolyline = null;
         mMarkers.clear();
         mPos = this.getPffLocation();
         addMarkersToMap();
@@ -289,16 +407,30 @@ public class PffGPSPathActivity extends FragmentActivity
         }
         // Clear the map because we don't want duplicates of the markers.
         mMap.clear();
-        mMutablePolyline = null;
+        mRoutePolyline = null;
         mPos = this.getPffLocation();
         addMarkersToMap();
+    }
+    
+    public void onRoute(View view) {
+    	java.util.List<java.lang.String> locations = new ArrayList<String>();
+
+		for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
+			LatLng pos = entry.getValue().getPosition();
+			String ns = pos.latitude+","+pos.longitude;
+			locations.add(ns);
+		}
+    	
+		mRouteManager.createRoute(locations);
+        Toast.makeText(this, R.string.route_wait, Toast.LENGTH_LONG).show();
+
     }
     
     public void onStartMap(View view) {
         if (!checkReady()) {
             return;
         }
-        Toast.makeText(getBaseContext(), "Starting PFF Path start="+mMarker.getPosition(), Toast.LENGTH_SHORT).show();
+        Toast.makeText(getBaseContext(), getString(R.string.start_map) +mMarker.getPosition(), Toast.LENGTH_SHORT).show();
         LatLngBounds.Builder boundsbuilder = new LatLngBounds.Builder();
 		for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
 			boundsbuilder.include(entry.getValue().getPosition());
@@ -312,7 +444,7 @@ public class PffGPSPathActivity extends FragmentActivity
         if (!checkReady()) {
             return;
         }
-        Toast.makeText(getBaseContext(), "Stoping PFF Path", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getBaseContext(), R.string.stop_map, Toast.LENGTH_SHORT).show();
 		Intent i = new Intent(PffGPSPathActivity.this, PffGPSPathService.class);
 		i.putExtra("action", "com.thinkthinkdo.pffgpspath.stop");
 		startService(i);
@@ -329,7 +461,7 @@ public class PffGPSPathActivity extends FragmentActivity
         // marker is centered and for the marker's info window to open, if it has one).
 		Log.i(LOGTAG, "onMarkerClick: marker.getId()"+marker.getId()+", pos="+marker.getPosition());
 		this.setPffLocation(marker.getPosition());
-        Toast.makeText(this, "PFF-Location set to"+marker.getPosition(), Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.set_pos) + marker.getPosition(), Toast.LENGTH_SHORT).show();
         return false;
     }
     
@@ -346,14 +478,14 @@ public class PffGPSPathActivity extends FragmentActivity
     public void onMarkerDragEnd(Marker marker) {
         mTopText.setText("onMarkerDragEnd");
         mMarker = marker;
-        if (mMutablePolyline!=null)
-        	mMutablePolyline.remove();
+        if (mRoutePolyline!=null)
+        	mRoutePolyline.remove();
         PolylineOptions options = new PolylineOptions();
 		for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
             options.add(entry.getValue().getPosition());		
 		}
         Polyline mutablePolyline = mMap.addPolyline(options);
-        mMutablePolyline = mutablePolyline;       
+        mRoutePolyline = mutablePolyline;       
     }
 
     @Override
@@ -387,16 +519,20 @@ public class PffGPSPathActivity extends FragmentActivity
 		i.putExtra("MperSec", MperSec);
 		i.putExtra("randomizespeed", randomizespeed);
 
-		ArrayList<String> pass = new ArrayList<String>();
-		int j=0;
-		for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
-			LatLng pos = entry.getValue().getPosition();
-			String ns = pos.latitude+":"+pos.longitude;
-			pass.add(ns);
-			j++;
+		ArrayList<String> path = new ArrayList<String>();
+		if (mRoute.isEmpty()) { 
+			for(Map.Entry<String,Marker> entry : mMarkers.entrySet()) {
+				LatLng pos = entry.getValue().getPosition();
+				String ns = pos.latitude+":"+pos.longitude;
+				path.add(ns);
+			}
+		} else {
+			for(LatLng pos : mRoute) {
+				String ns = pos.latitude+":"+pos.longitude;
+				path.add(ns);
+			}			
 		}
-
-		i.putStringArrayListExtra("locations", pass);
+		i.putStringArrayListExtra("locations", path);
 
 		startService(i);
 		automaticBind();
