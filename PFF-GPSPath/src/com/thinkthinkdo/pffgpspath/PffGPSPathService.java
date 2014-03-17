@@ -1,3 +1,25 @@
+/*
+	PFF-GPSPath: map based tool for the PFF enabled Android to set and 
+	             simulate the spoofed location.
+    It uses the MapQuest elevation and routing service to calculate elevation
+    and routing information. Map data is based on  OpenStreetMap 	              
+	 
+	Copyright (C) 2013-2014 Guhl
+	
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+	
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package com.thinkthinkdo.pffgpspath;
 
 import java.lang.reflect.InvocationTargetException;
@@ -6,16 +28,11 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.android.gms.maps.model.LatLng;
-import com.thinkthinkdo.pffgpspath.PffGPSPathActivity;
+import com.mapquest.android.maps.GeoPoint;
 
-import android.app.Notification;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.location.Location;
-import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -71,7 +88,7 @@ public class PffGPSPathService  extends Service {
 			for (String loc : startLocations) {
 				Log.i(LOGTAG, "loc="+loc);
 				String[] arr = loc.split(":");
-				LatLng newloc = new LatLng((Double.parseDouble(arr[0])), (Double.parseDouble(arr[1])));
+				GeoPoint newloc = new GeoPoint((Double.parseDouble(arr[0])), (Double.parseDouble(arr[1])));
 				currentThread.locations.add(newloc);
 			}
 
@@ -103,7 +120,7 @@ public class PffGPSPathService  extends Service {
 	 */
 	class UpdateGPSThread extends Thread {
 
-		ArrayList<LatLng> locations = new ArrayList<LatLng>();
+		ArrayList<GeoPoint> locations = new ArrayList<GeoPoint>();
 		double[] distances;
 		public boolean Running;
 		public double MperSec;
@@ -145,7 +162,7 @@ public class PffGPSPathService  extends Service {
 			        	Method pffSetLocationMethod = mPm.getClass().getMethod("pffSetLocation", locationBeanClass);
 			        	pffSetLocationMethod.invoke(mPm, locBean);
 			        	// notify the UI
-			        	sendLatLngToUI(new LatLng(curLat,curLng));
+			        	sendLatLngToUI(new GeoPoint(curLat,curLng));
 		        } catch (NoSuchMethodException e) {
 		            e.printStackTrace();
 		        } catch (IllegalAccessException e) {
@@ -187,18 +204,18 @@ public class PffGPSPathService  extends Service {
 				if (metersTravelled < distances[i]) {
 					double perc = metersTravelled / distances[i];
 					Log.i(LOGTAG, "calcCurrentPosition: i="+i+", distances[i]="+distances[i]+", perc="+perc);
-					curLat = locations.get(i).latitude;
-					curLat -= perc * (locations.get(i).latitude - locations.get(i + 1).latitude);
-					curLng = locations.get(i).longitude;
-					curLng -= perc * (locations.get(i).longitude - locations.get(i + 1).longitude);
+					curLat = locations.get(i).getLatitude();
+					curLat -= perc * (locations.get(i).getLatitude() - locations.get(i + 1).getLatitude());
+					curLng = locations.get(i).getLongitude();
+					curLng -= perc * (locations.get(i).getLongitude() - locations.get(i + 1).getLongitude());
 					curBearing = MapsHelper.bearing(locations.get(i), locations.get(i + 1));
 					return;
 				}
 				metersTravelled -= distances[i];
 			}
 
-			curLat = locations.get(locations.size() - 1).latitude;
-			curLng = locations.get(locations.size() - 1).longitude;
+			curLat = locations.get(locations.size() - 1).getLatitude();
+			curLng = locations.get(locations.size() - 1).getLongitude();
 			Running = false;
 		}
 
@@ -223,15 +240,15 @@ public class PffGPSPathService  extends Service {
      * Send the data to all clients.
      * @param intvaluetosend The value to send.
      */
-    private void sendLatLngToUI(LatLng loc) {
+    private void sendLatLngToUI(GeoPoint loc) {
             Iterator<Messenger> messengerIterator = mClients.iterator();            
             while(messengerIterator.hasNext()) {
                     Messenger messenger = messengerIterator.next();
                     try {
                             // Send data as a String
                             Bundle bundle = new Bundle();
-                            bundle.putString("lat", Double.toString(loc.latitude));
-                            bundle.putString("lng", Double.toString(loc.longitude));
+                            bundle.putString("lat", Double.toString(loc.getLatitude()));
+                            bundle.putString("lng", Double.toString(loc.getLongitude()));
                             Message msg = Message.obtain(null, MSG_SET_LATLNG_VALUE);
                             msg.setData(bundle);
                             messenger.send(msg);
